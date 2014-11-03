@@ -1,74 +1,145 @@
-from nltk import sent_tokenize, word_tokenize
+from nltk import sent_tokenize, word_tokenize, bigrams, Text
 from nltk.probability import FreqDist
 from nltk.corpus import stopwords
 
-from os.path import isfile
+from math import log, floor
+from os.path import isfile, realpath, dirname
+from os import walk, sep as separator
 from re import sub
+from sys import argv
 
-sample_text_file = 'sample_text'
+DIRNAME = dirname(realpath(__file__))
+
 punctuation = ',.;:\'!"[]{}()`?'
 stop_words = stopwords.words()
 
+"""
+	BACKGROUND CORPUS
+"""
+def get_background_corpus():
+	corpus = {}
+	corpus_location = separator.join((DIRNAME, 'corpus'))
+	for dirpath, dirnames, filenames in walk(corpus_location):
+		for filepath in filenames:
+			filepath = separator.join((dirpath, filepath))
+			with open(filepath) as f:
+				corpus[filepath] = f.read()
+	return corpus
+
+"""
+	SENTENCES
+"""
 def get_sentence_tokens(text):
 	sent_tokens = sent_tokenize(text)
 	return sent_tokens
-	
-def get_word_frequency(word_tokens):
-	# get the most common words
-	# TODO: amount depending on length of text
-	frequency = FreqDist(word_tokens)
-	most_common = frequency.most_common(len(word_tokens))
 
-	length = sum([w[1] for w in most_common])
-	tokens = {w[0]: {'freq':w[1], 'prob':w[1]/length} for w in most_common}
-
-	# return the words without their counts
-	return tokens
-
-def get_word_tokens(text, get_most_frequent=True):
+"""
+	WORDS
+"""
+def get_word_tokens(text, without_stopwords=True):
 	# tokenise the text, removing punctuation and stopwords
 	word_tokens = word_tokenize(strip_text(text))
-	word_tokens = [w for w in word_tokens if w not in stop_words]
+	if without_stopwords:
+		word_tokens = [w for w in word_tokens if w not in stop_words]
 	return word_tokens
+	
+def get_word_frequency(word_tokens):
+	return FreqDist(word_tokens)
 
+# get words with a minimum length of min_length
+# if a frequency value is supplied, only words with a frequency greater or equal will be returned 
+def get_long_words(tokens, min_lenth=10, frequency=None):
+	words = [w for w in set(tokens) if len(w) >= min_lenth]
+	if frequency:
+		freqdist = get_word_frequency(tokens)
+		words = [w for w in words if freqdist[w] >= frequency]
+	return words
+
+def get_collocations(tokens):
+	text = Text(tokens)
+	return text.collocations()
+
+"""
+	SAMPLE
+"""
 def strip_text(text):
 	return sub('[^a-zA-Z\s\-]', '', text.lower())
 
-def run(text):
+"""
+	ALGORITHMS
+"""
+def generate_tfidf(text, most_common=False):
+	text = text.lower()
+	tokens = get_word_tokens(text)
+	tokens_freqdist = get_word_frequency(tokens)
+	background_corpus = get_background_corpus()
+
+	D = len(background_corpus)
+	d = { w: 0 for w in tokens }
+	for filepath, sample in background_corpus.items():
+		sample_words = get_word_tokens(sample)
+		sample_freqdist = get_word_frequency(sample_words)
+		for word in tokens:
+			if sample_freqdist[word] > 0:
+				d[word] = 1
+	tfidf = { word: (tokens_freqdist[word] * log(D/(1 + d[word]))) for word in tokens }
+
+	if most_common and isinstance(most_common, int):
+		return sorted(tfidf.items(), key=lambda x: x[1], reverse=True)[:most_common]
+
+	return tfidf
+
+def rank_sentences_tfidf(text, limit=10):
 	text = text.lower()
 	sentences = get_sentence_tokens(text)
-	text_tokens = get_word_tokens(text)
-	text_frequency = get_word_frequency(text_tokens)
-	weighted = []
-
+	tokens = generate_tfidf(text).items()
+	ranked = []
 	for index, sentence in enumerate(sentences):
-		sentence_tokens = get_word_tokens(sentence)
-		sentence_frequency = get_word_frequency(sentence_tokens)
-		score = None
-		for word in sentence_tokens:
-			word_score = sentence_frequency[word].get('prop', 0)
-			word_score += text_frequency[word].get('prob', 0)
-			score = word_score if score==None else(score + word_score) / 2
-		weighted.append((sentence, score, index))
+		score = 0
+		stripped = strip_text(sentence)
+		for token in tokens:
+			if token[0] in stripped:
+				score += token[1]
+		ranked.append((index, sentence.capitalize(), score))
 
-	from math import floor
-	divisor = 3
-	# sort weighted by sentence probability
-	weighted.sort(key=lambda tup: tup[1])
-	cut_off = list(set([s[1] for s in weighted]))
-	cut_off = cut_off[floor(len(cut_off)/divisor)]
-	print('cut off', cut_off)
+	l = len(ranked)
+	for index, item in enumerate(ranked):
+		average = item[2]
+		if index > 0:
+			average = (average + ranked[index - 1][2]) / 2
+		if index < l - 1:
+			average = (average + ranked[index + 1][2]) / 2
+		# index, sentence, average surrounding score, score
+		ranked[index] = (index, item[1], average, item[2])
 
-	# sort weighted by sentence index
-	weighted.sort(key=lambda tup: tup[2])
-	selected = [s[0] for s in weighted if s[1] >= cut_off]
-	summary = ' '.join([s.capitalize() for s in selected])
+	# sort ranked items by averaged surrounding score
+	ranked.sort(key=lambda s: s[2], reverse=True)
+
+	# return top X ranked sentences in appearance order
+	return sorted(ranked[:limit], key=lambda x: x[0])
+
+"""
+	MAIN
+"""
+def run(text):
+	ranked = rank_sentences_tfidf(text)
+	summary = ' '.join([s[1] for s in ranked])
 	print(summary)
 	print()
-	print('summarised', len(sentences), 'sentences to', len(selected), 'sentences')
+	print('summarised', len(text), 'chars to', len(summary), 'chars')
 
 if __name__ == '__main__':
+	# if no file given exit script
+	if len(argv) == 1:
+		print('need a file to analyse')
+		exit(1)
+
+	sample_file = separator.join((DIRNAME, argv[1]))
+	if not isfile(sample_file):
+		print('given file does not exist')
+		exit(2)
+
+	print('reading', sample_file)
 	# run the summarise method with the sample text file if it exists
-	if isfile(sample_text_file):
-		with open(sample_text_file) as f:
-			run(f.read())
+	with open(sample_file) as f:
+		run(f.read())
