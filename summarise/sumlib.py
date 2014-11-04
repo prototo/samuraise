@@ -19,7 +19,9 @@ stop_words = stopwords.words()
 def get_background_corpus():
 	corpus = {}
 	corpus_location = separator.join((DIRNAME, 'corpus'))
+	print(corpus_location)
 	for dirpath, dirnames, filenames in walk(corpus_location):
+		print(filenames)
 		for filepath in filenames:
 			filepath = separator.join((dirpath, filepath))
 			with open(filepath) as f:
@@ -124,6 +126,8 @@ def rank_sentences_tfidf(text, limit=10):
 def run(text):
 	ranked = rank_sentences_tfidf(text)
 	summary = ' '.join([s[1] for s in ranked])
+	return summary
+
 	print(summary)
 	print()
 	print('summarised', len(text), 'chars to', len(summary), 'chars')
