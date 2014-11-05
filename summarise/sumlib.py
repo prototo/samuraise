@@ -25,7 +25,7 @@ def get_background_corpus():
 		print(filenames)
 		for filepath in filenames:
 			filepath = separator.join((dirpath, filepath))
-			with open(filepath, "r", "utf-8") as f:
+			with codecs.open(filepath, "r", "utf-8") as f:
 				corpus[filepath] = f.read()
 	return corpus
 
