@@ -7,6 +7,7 @@ from os.path import isfile, realpath, dirname
 from os import walk, sep as separator
 from re import sub
 from sys import argv
+import codecs
 
 DIRNAME = dirname(realpath(__file__))
 
@@ -24,7 +25,7 @@ def get_background_corpus():
 		print(filenames)
 		for filepath in filenames:
 			filepath = separator.join((dirpath, filepath))
-			with open(filepath) as f:
+			with open(filepath, "r", "utf-8") as f:
 				corpus[filepath] = f.read()
 	return corpus
 
