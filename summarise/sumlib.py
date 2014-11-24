@@ -2,6 +2,7 @@ from nltk import sent_tokenize, word_tokenize, bigrams, Text
 from nltk.probability import FreqDist
 from nltk.corpus import stopwords
 
+from hashlib import md5
 from math import log, floor
 from os.path import isfile, realpath, dirname
 from os import walk, sep as separator
@@ -10,6 +11,7 @@ from sys import argv
 import codecs
 
 DIRNAME = dirname(realpath(__file__))
+corpus_location = separator.join((DIRNAME, 'corpus'))
 
 punctuation = ',.;:\'!"[]{}()`?'
 stop_words = stopwords.words()
@@ -19,7 +21,6 @@ stop_words = stopwords.words()
 """
 def get_background_corpus():
 	corpus = {}
-	corpus_location = separator.join((DIRNAME, 'corpus'))
 
 	for dirpath, dirnames, filenames in walk(corpus_location):
 		for filepath in filenames:
@@ -27,6 +28,16 @@ def get_background_corpus():
 			with codecs.open(filepath, "r", "utf-8") as f:
 				corpus[filepath] = f.read()
 	return corpus
+
+def add_to_corpus(text):
+	hash = md5(text.encode()).hexdigest()
+	filename = separator.join((corpus_location, hash))
+	print(filename)
+	if isfile(filename):
+		return False
+	with open(filename, 'w') as f:
+		f.write(text)
+	return filename
 
 """
 	SENTENCES
@@ -77,6 +88,7 @@ def generate_tfidf(text, most_common=False):
 	background_corpus = get_background_corpus()
 
 	D = len(background_corpus)
+	D = D if D else 1
 	d = { w: 0 for w in tokens }
 	for filepath, sample in background_corpus.items():
 		sample_words = get_word_tokens(sample)
@@ -135,6 +147,7 @@ def run(text, quiet=True):
 		print()
 		print('summarised', len(text), 'chars to', len(summary), 'chars')
 
+	add_to_corpus(text)
 	return (keywords, summary)
 
 if __name__ == '__main__':
