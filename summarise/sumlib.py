@@ -20,9 +20,8 @@ stop_words = stopwords.words()
 def get_background_corpus():
 	corpus = {}
 	corpus_location = separator.join((DIRNAME, 'corpus'))
-	print(corpus_location)
+
 	for dirpath, dirnames, filenames in walk(corpus_location):
-		print(filenames)
 		for filepath in filenames:
 			filepath = separator.join((dirpath, filepath))
 			with codecs.open(filepath, "r", "utf-8") as f:
@@ -97,6 +96,7 @@ def rank_sentences_tfidf(text, limit=10):
 	sentences = get_sentence_tokens(text)
 	tokens = generate_tfidf(text).items()
 	ranked = []
+
 	for index, sentence in enumerate(sentences):
 		score = 0
 		stripped = strip_text(sentence)
@@ -124,14 +124,18 @@ def rank_sentences_tfidf(text, limit=10):
 """
 	MAIN
 """
-def run(text):
+def run(text, quiet=True):
+	keywords = [token[0] for token in sorted(generate_tfidf(text).items(), key=lambda x: x[1], reverse=True)][:10]
 	ranked = rank_sentences_tfidf(text)
 	summary = ' '.join([s[1] for s in ranked])
-	return summary
 
-	print(summary)
-	print()
-	print('summarised', len(text), 'chars to', len(summary), 'chars')
+	if not quiet:
+		print('keywords:', keywords)
+		print('summary:', summary)
+		print()
+		print('summarised', len(text), 'chars to', len(summary), 'chars')
+
+	return (keywords, summary)
 
 if __name__ == '__main__':
 	# if no file given exit script

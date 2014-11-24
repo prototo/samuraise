@@ -6,4 +6,5 @@ import urllib.parse
 def my_view(request):
     body = urllib.parse.unquote_plus(request.body.decode('utf-8'))
     print('body len', len(body))
-    return {'summary': sumlib.run(body)}
+    (keywords, summary) = sumlib.run(body)
+    return {'keywords': keywords, 'summary': summary}
