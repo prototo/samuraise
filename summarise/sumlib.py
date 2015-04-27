@@ -14,7 +14,9 @@ DIRNAME = dirname(realpath(__file__))
 corpus_location = separator.join((DIRNAME, 'corpus'))
 
 punctuation = ',.;:\'!"[]{}()`?'
-stop_words = stopwords.words()
+stop_words = set(stopwords.words())
+for w in ['hi', 'hello', 'thanks', 'thank', 'you', 'i', 'ive', 'like', 'get']:
+	stop_words.add(w)
 
 """
 	BACKGROUND CORPUS
@@ -76,7 +78,10 @@ def get_collocations(tokens):
 	SAMPLE
 """
 def strip_text(text):
-	return sub('[^a-zA-Z\s\-]', '', text.lower())
+	# remove any urls from the text
+	text = sub('https?:\/\/[^\s]*\s?', '', text)
+	# remove any unwanted punctuation
+	return sub('[^a-zA-Z\s\-]', '', text)
 
 """
 	ALGORITHMS
@@ -150,6 +155,49 @@ def run(text, quiet=True):
 	add_to_corpus(text)
 	return (keywords, summary)
 
+"""
+	Generate a summary for post based request data
+"""
+def posts_run(posts):
+	for post in posts:
+		# add all the portions of author names to the stopwords lists
+		name = post['author']
+		for n in name.split(' '):
+			stop_words.add(n)
+		# add all post bodies to the corpus
+		body = post['body']
+		add_to_corpus(body)
+
+	# rank the posts
+	tfidfs = list(map(lambda p: (p['body'], generate_tfidf(p['body'])), posts))
+	ranked = list(map(lambda p: (tfidfs.index(p), sum(p[1].values()) / len(p[1].values()), p[0]), tfidfs))
+	ranked.sort(key=lambda r: r[1], reverse=True)
+
+	# get the most relevant posts, with some degree of disimilarity between them
+	THRESHOLD = 0.25
+	MAX = 3
+	select = [ranked[0]]
+	for r in ranked:
+		if r[1] <= select[-1][1] - THRESHOLD:
+			select.append(r)
+			if (len(select) >= MAX):
+				break
+
+	select = [s[2] for s in sorted(select, key=lambda s: s[0])]
+
+	# keyword
+	body = ''
+	for p in posts:
+		body += p['body'] + ' '
+	kw = list(generate_tfidf(body).items())
+	kw.sort(key=lambda w: w[1], reverse=True)
+	keywords = list(map(lambda w: w[0], kw[:15]))
+
+	return (keywords, select)
+
+"""
+	RUNNING AS SCRIPT
+"""
 if __name__ == '__main__':
 	# if no file given exit script
 	if len(argv) == 1:
